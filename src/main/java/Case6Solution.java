@@ -3,10 +3,11 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.Map;
+import model.Customer;
 import org.camunda.bpm.client.ExternalTaskClient;
+import model.CustomerAddress;
 
 public class Case6Solution {
 
@@ -48,6 +49,25 @@ public class Case6Solution {
 			// übergeben
 			externalTaskService.complete(externalTask, results);
 		}).open();
+
+		// New external service task registration for the additional task
+		client.subscribe("group10_newTask").lockDuration(1000).handler((externalTask, externalTaskService) -> {
+			// Variable "customerId" aus der Prozessinstanz auslesen
+			Integer customerId = (Integer) externalTask.getVariable("customerId");
+			System.out.println("Variable \"customerId\" from process: " + customerId);
+
+			// Perform some processing for the new task
+			String customerDetails = processCustomerDetails(customerId);
+			System.out.println("Processed Customer Details: " + customerDetails);
+
+			// Create a map with results
+			Map<String, Object> results = new HashMap<>();
+			results.put("customerDetails", customerDetails);
+
+			// Task erfolgreich abschliessen und die Map "results" an die Process Engine
+			// übergeben
+			externalTaskService.complete(externalTask, results);
+		}).open();
 	}
 
 	// Method to get customer info from the database
@@ -82,70 +102,9 @@ public class Case6Solution {
 		return customer;
 	}
 
-}
-
-// Customer class definition
-class Customer {
-	private int custId;
-	private String name;
-	private String email;
-	private String phone;
-	private String comment;
-	private Timestamp createdOn;
-
-	// Getters and setters
-
-	public int getCustId() {
-		return custId;
-	}
-
-	public void setCustId(int custId) {
-		this.custId = custId;
-	}
-
-	public String getName() {
-		return name;
-	}
-
-	public void setName(String name) {
-		this.name = name;
-	}
-
-	public String getEmail() {
-		return email;
-	}
-
-	public void setEmail(String email) {
-		this.email = email;
-	}
-
-	public String getPhone() {
-		return phone;
-	}
-
-	public void setPhone(String phone) {
-		this.phone = phone;
-	}
-
-	public String getComment() {
-		return comment;
-	}
-
-	public void setComment(String comment) {
-		this.comment = comment;
-	}
-
-	public Timestamp getCreatedOn() {
-		return createdOn;
-	}
-
-	public void setCreatedOn(Timestamp createdOn) {
-		this.createdOn = createdOn;
-	}
-
-	@Override
-	public String toString() {
-		return "Customer [custId=" + custId + ", name=" + name + ", email=" + email + ", phone=" + phone + ", comment="
-				+ comment + ", createdOn=" + createdOn + "]";
+	// New method to process customer details for the new task
+	private static String processCustomerDetails(Integer customerId) {
+		// Placeholder for the actual processing logic
+		return "Processed details for customer with ID: " + customerId;
 	}
 }
