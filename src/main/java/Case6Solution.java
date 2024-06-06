@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 
 public class Case6Solution {
 
-	private static final String JDBC_URL = "jdbc:mysql://192.168.111.13/?serverTimezone=Europe/Berlin";
+	private static final String JDBC_URL = "jdbc:mysql://192.168.111.13/vl_custmgmt?serverTimezone=Europe/Berlin";
 	private static final String JDBC_USER = "vl_custmgmt";
 	private static final String JDBC_PASSWD = "d854hg23t48+f2z-fvtz8tb0b4v";
 
