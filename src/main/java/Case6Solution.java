@@ -7,79 +7,90 @@ import java.util.HashMap;
 import java.util.Map;
 import model.Customer;
 import org.camunda.bpm.client.ExternalTaskClient;
-import model.CustomerAddress;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Case6Solution {
 
+	private static final String JDBC_URL = "jdbc:mysql://192.168.111.13/";
+	private static final String JDBC_USER = "vl_custmgmt";
+	private static final String JDBC_PASSWD = "d854hg23t48+f2z-fvtz8tb0b4v";
+
+	private static final String WORKFLOW_ENGINE_URL = "192.168.111.3:8080/engine-rest";
+	private static final String WORKFLOW_ENGINE_USER = "group10";
+	private static final String WORKFLOW_ENGINE_PASSWD = "Pliuzbi7vt8Ioud";
+
+	private static final Logger logger = LoggerFactory.getLogger(Case6Solution.class);
+
 	public static void main(String[] args) {
+		try {
+			logger.info("Starting the workflow engine connection setup.");
 
-		/*******************
-		 Dies ist das gleiche External Service Task Beispiel wie in Case 1 und soll hier
-		 als Vorlage für die Umsetzung der DB Anbindung mit JDBC genutzt werden.
+			// Verbindung zur Workflow Engine aufbauen
+			ExternalTaskClient client = ExternalTaskClient.create()
+					.baseUrl("http://"+WORKFLOW_ENGINE_USER+":"+WORKFLOW_ENGINE_PASSWD+"@" + WORKFLOW_ENGINE_URL).asyncResponseTimeout(1000)
+					.build();
 
-		 Der MySQL JDBC Driver ist bereits in der pom.xml eingetragen.
-		 ********************/
+			logger.info("Connected to the workflow engine.");
 
-		// Verbindung zur Workflow Engine aufbauen
-		ExternalTaskClient client = ExternalTaskClient.create()
-				.baseUrl("http://group10:d854hg23t48+f2z-fvtz8tb0b4v@192.168.111.3:8080/engine-rest").asyncResponseTimeout(1000)
-				.build();
+			// für das Topic "group10_greeting" registrieren und die folgende Funktion bei jedem Aufruf ausführen
+			client.subscribe("group10_greeting").lockDuration(1000).handler((externalTask, externalTaskService) -> {
+				// Variable "name" aus der Prozessinstanz auslesen
+				String name = externalTask.getVariable("name");
+				logger.info("Received variable 'name' from process: {}", name);
 
-		// für das Topic "group1_sendGreeting" registrieren und die folgende Funktion
-		// bei jedem Aufruf ausführen
-		client.subscribe("group10_greeting").lockDuration(1000).handler((externalTask, externalTaskService) -> {
+				// Retrieve customer data from the database
+				Customer customer = getCustomerInfo(name);
+				if (customer != null) {
+					logger.info("Customer Info: {}", customer);
 
-			// Variable "name" aus der Prozessinstanz auslesen
-			String name = (String) externalTask.getVariable("name");
-			System.out.println("Variable \"name\" from process: " + name);
+					// Create a greeting message
+					String completeGreeting = "Hello " + customer.getName() + ", your email is " + customer.getEmail()
+							+ " and your phone number is " + customer.getPhone();
 
-			// Retrieve customer data from the database
-			Customer customer = getCustomerInfo(name);
-			System.out.println("Customer Info: " + customer);
+					// Create a map with results
+					Map<String, Object> results = new HashMap<>();
+					results.put("result", completeGreeting);
 
-			// Create a greeting message
-			String completeGreeting = "Hello " + customer.getName() + ", your email is " + customer.getEmail()
-					+ " and your phone number is " + customer.getPhone();
+					// Task erfolgreich abschliessen und die Map "results" an die Process Engine übergeben
+					externalTaskService.complete(externalTask, results);
+					logger.info("Task completed successfully with results: {}", results);
+				} else {
+					logger.error("Customer not found for name: {}", name);
+				}
+			}).open();
 
-			// Create a map with results
-			Map<String, Object> results = new HashMap<>();
-			results.put("result", completeGreeting);
+			// New external service task registration for the additional task
+			client.subscribe("group10_newTask").lockDuration(1000).handler((externalTask, externalTaskService) -> {
+				// Variable "customerId" aus der Prozessinstanz auslesen
+				Integer customerId = externalTask.getVariable("customerId");
+				logger.info("Received variable 'customerId' from process: {}", customerId);
 
-			// Task erfolgreich abschliessen und die Map "results" an die Process Engine
-			// übergeben
-			externalTaskService.complete(externalTask, results);
-		}).open();
+				// Perform some processing for the new task
+				String customerDetails = processCustomerDetails(customerId);
+				logger.info("Processed Customer Details: {}", customerDetails);
 
-		// New external service task registration for the additional task
-		client.subscribe("group10_newTask").lockDuration(1000).handler((externalTask, externalTaskService) -> {
-			// Variable "customerId" aus der Prozessinstanz auslesen
-			Integer customerId = (Integer) externalTask.getVariable("customerId");
-			System.out.println("Variable \"customerId\" from process: " + customerId);
+				// Create a map with results
+				Map<String, Object> results = new HashMap<>();
+				results.put("customerDetails", customerDetails);
 
-			// Perform some processing for the new task
-			String customerDetails = processCustomerDetails(customerId);
-			System.out.println("Processed Customer Details: " + customerDetails);
-
-			// Create a map with results
-			Map<String, Object> results = new HashMap<>();
-			results.put("customerDetails", customerDetails);
-
-			// Task erfolgreich abschliessen und die Map "results" an die Process Engine
-			// übergeben
-			externalTaskService.complete(externalTask, results);
-		}).open();
+				// Task erfolgreich abschliessen und die Map "results" an die Process Engine übergeben
+				externalTaskService.complete(externalTask, results);
+				logger.info("Task completed successfully with results: {}", results);
+			}).open();
+		} catch (Exception e) {
+			logger.error("An error occurred while setting up the workflow engine connection.", e);
+		}
 	}
 
 	// Method to get customer info from the database
 	private static Customer getCustomerInfo(String customerName) {
-		String jdbcUrl = "jdbc:mysql://127.0.0.1/SA";
-		String jdbcUser = "vl_custmgmt";
-		String jdbcPassword = "d854hg23t48+f2z-fvtz8tb0b4v";
+		final Logger logger = LoggerFactory.getLogger(Case6Solution.class);
+
 		Customer customer = null;
+		final String query = "SELECT custId, name, email, phone, comment, createdOn FROM customer WHERE name = ?";
 
-		String query = "SELECT custId, name, email, phone, comment, createdOn FROM customer WHERE name = ?";
-
-		try (Connection connection = DriverManager.getConnection(jdbcUrl, jdbcUser, jdbcPassword);
+		try (Connection connection = DriverManager.getConnection(JDBC_URL, JDBC_USER, JDBC_PASSWD);
 			 PreparedStatement preparedStatement = connection.prepareStatement(query)) {
 
 			preparedStatement.setString(1, customerName);
@@ -96,7 +107,7 @@ public class Case6Solution {
 				}
 			}
 		} catch (SQLException e) {
-			e.printStackTrace();
+			logger.error("An error occurred while retrieving customer info for name: {}", customerName, e);
 		}
 
 		return customer;
@@ -104,7 +115,10 @@ public class Case6Solution {
 
 	// New method to process customer details for the new task
 	private static String processCustomerDetails(Integer customerId) {
+		final Logger logger = LoggerFactory.getLogger(Case6Solution.class);
 		// Placeholder for the actual processing logic
-		return "Processed details for customer with ID: " + customerId;
+		String processedDetails = "Processed details for customer with ID: " + customerId;
+		logger.debug("Processing details for customerId: {}", customerId);
+		return processedDetails;
 	}
 }
